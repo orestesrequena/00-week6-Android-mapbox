@@ -7,11 +7,13 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.NonNull;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import com.android.volley.Request;
@@ -37,11 +39,14 @@ import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
 import com.mapbox.mapboxsdk.maps.OnMapReadyCallback;
 import com.mapbox.mapboxsdk.maps.Style;
-import com.squareup.picasso.Picasso;
 
 public class MainActivity extends AppCompatActivity {
     private MapView mapView;
-    private int[] colors = {} ;
+    private Spinner spinnerActivite;
+    private String activite = null;
+    private  MapboxMap mapboxMap;
+
+    private String[] colors = {"#ff0000","#ff0080","#ff00bf","#ff00ff","#bf00ff","#8000ff","#4000ff","#0000ff","#0040ff","#00ffff","#00ff80","#00ff40","#80ff00","#ffff00","#ff8000","#ff0000","#ff0080","#ff00bf","#ff00ff","#bf00ff","#8000ff","#4000ff","#0000ff","#0040ff","#00ffff","#00ff80","#00ff40","#80ff00","#ffff00","#ff8000","#ff0000","#ff0080","#ff00bf","#ff00ff","#bf00ff","#8000ff","#4000ff","#0000ff","#0040ff","#00ffff","#00ff80","#00ff40","#80ff00","#ffff00","#ff8000"} ;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,48 +55,78 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
         mapView = findViewById(R.id.mapView);
+        spinnerActivite = findViewById(R.id.spinnerActivite);
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(new OnMapReadyCallback() {
             @Override
-            public void onMapReady(@NonNull final MapboxMap mapboxMap) {
+            public void onMapReady(@NonNull final MapboxMap map) {
+                mapboxMap = map;
                 mapboxMap.setStyle(Style.MAPBOX_STREETS, new Style.OnStyleLoaded() {
                     @Override
                     public void onStyleLoaded(@NonNull Style style) {
                         // Map is set up and the style has loaded. Now you can add data or make other map adjustments
-                        if (Network.isNetworkAvailable(MainActivity.this)) {
-                            // Instantiate the RequestQueue.
-                            RequestQueue queue = Volley.newRequestQueue(MainActivity.this);
-                            String url = Constant.URL;
-
-                            // Request a string response from the provided URL.
-                            StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
-                                    new Response.Listener<String>() {
-                                        @Override
-                                        public void onResponse(String response) {
-                                            Log.e("response ", response);
-                                            CommercesRoubaix commerces = new Gson().fromJson( response, CommercesRoubaix.class);
-                                            for( int i=0; i<commerces.records.size(); i++){
-                                                addMarkerProf(mapboxMap,commerces.records.get(i));
-                                            }
-                                            ArrayAdapter<Facet> adapter =
-                                        }
-                                    }, new Response.ErrorListener() {
-                                @Override
-                                public void onErrorResponse(VolleyError error) {
-                                    Log.e("response ", "error");
-                                }
-                            });
-                            // Add the request to the RequestQueue.
-                            queue.add(stringRequest);
-                        } else {
-                            FastDialog.showDialog(MainActivity.this, FastDialog.SIMPLE_DIALOG, "no connection");
-                        }
+                        makeRequest();
                     }
                 });
             }
         });
     }
 
+    public void makeRequest (){
+        if (Network.isNetworkAvailable(MainActivity.this)) {
+            // Instantiate the RequestQueue.
+            RequestQueue queue = Volley.newRequestQueue(MainActivity.this);
+            String url = Constant.URL;
+            if(activite != null){
+                url += "&refine.activite="+ activite;
+            }
+
+            // Request a string response from the provided URL.
+            StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+                    new Response.Listener<String>() {
+                        @Override
+                        public void onResponse(String response) {
+                            Log.e("response ", response);
+                            final CommercesRoubaix commerces = new Gson().fromJson( response, CommercesRoubaix.class);
+                            mapboxMap.clear();
+                            for( int i=0; i<commerces.records.size(); i++){
+                                addMarkerProf(mapboxMap,commerces.records.get(i));
+                            }
+                            //Activités
+                            if ( activite == null){
+                                ArrayAdapter<Facet> adapter = new ActiviteAdapterSpinner(
+                                        MainActivity.this, R.layout.item_selector_activite, commerces.facet_groups.get(2).facets, colors);
+                                //adapter.setDropDownViewResource(R.layout.item_selector_activite);
+//
+                                spinnerActivite.setAdapter(adapter);
+                                spinnerActivite.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                                    @Override
+                                    public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                                        activite = commerces.facet_groups.get(2).facets.get(position).name;
+
+                                        makeRequest();
+                                    }
+
+                                    @Override
+                                    public void onNothingSelected(AdapterView<?> parent) {
+
+                                    }
+                                });
+                            }
+
+                        }
+                    }, new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    Log.e("response ", "error");
+                }
+            });
+            // Add the request to the RequestQueue.
+            queue.add(stringRequest);
+        } else {
+            FastDialog.showDialog(MainActivity.this, FastDialog.SIMPLE_DIALOG, "no connection");
+        }
+    }
 
 
     public Bitmap convertToBitmap(Drawable drawable, int widthPixels, int heightPixels) {
@@ -108,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
 
         Drawable mDrawable = MainActivity.this.getResources().getDrawable(R.drawable.mapbox_marker_icon_default);
         mDrawable.setColorFilter(new
-                PorterDuffColorFilter(Color.parseColor("#FF1B80D8"), PorterDuff.Mode.MULTIPLY));
+                PorterDuffColorFilter(Color.parseColor(colors[commerces.fields.activite_regroupee_code]), PorterDuff.Mode.MULTIPLY));
         Icon icon = IconFactory.getInstance(MainActivity.this).fromBitmap(convertToBitmap(mDrawable, mDrawable.getMinimumWidth(),mDrawable.getMinimumHeight()));
 
         MarkerOptions markerOptions = new MarkerOptions();
